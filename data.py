@@ -1,7 +1,7 @@
-"""The only course list the agent is allowed to use.
+"""The course data.
 
-If a subject is not in COURSES, the tools must say it is missing.
-They must not invent chapters or hours.
+The agent is only allowed to use what is written in this file.
+If a subject is not here, the agent must say "I do not have it".
 """
 
 import re
@@ -52,80 +52,51 @@ COURSES = {
     },
 }
 
-# Short names a student might type.
-EXTRA_NAMES = {
+# Short names a student might type (always lower case).
+NICKNAMES = {
     "ai": "Artificial Intelligence Techniques",
     "ai techniques": "Artificial Intelligence Techniques",
     "artificial intelligence": "Artificial Intelligence Techniques",
     "wqf 7002": "Artificial Intelligence Techniques",
-    "dsa": "Data Structures",
     "data structure": "Data Structures",
     "database": "Database Systems",
     "databases": "Database Systems",
     "db": "Database Systems",
-    "ml": "Machine Learning",
 }
 
 
-def clean_name(text):
-    """Make a name lower-case and remove punctuation, so 'WQF-7002' still matches."""
-    text = text.lower().replace("&", " and ")
-    text = re.sub(r"[^a-z0-9\s]", " ", text)
-    text = re.sub(r"\s+", " ", text)
+def simplify(text):
+    """Lower case, no punctuation. 'WQF-7002' becomes 'wqf 7002'."""
+    text = re.sub(r"[^a-z0-9]+", " ", str(text).lower())
     return text.strip()
 
 
-def subject_names():
-    return list(COURSES.keys())
+def find_subject(text):
+    """Return the full subject name, or None if we do not have that subject."""
+    typed = simplify(text)
+    if typed == "":
+        return None
+
+    # 1. A nickname, like "ml" or "database".
+    if typed in NICKNAMES:
+        return NICKNAMES[typed]
+
+    # 2. The exact name or the course code.
+    for name, course in COURSES.items():
+        if typed == simplify(name) or typed == simplify(course["code"]):
+            return name
+
+    # 3. The full name appears inside what was typed.
+    for name in COURSES:
+        if simplify(name) in typed:
+            return name
+
+    return None
 
 
-def course_record(name):
-    course = COURSES[name]
-    chapters = []
+def total_hours(subject):
+    """Add up the hours of every chapter of one subject."""
     total = 0
-    for chapter in course["chapters"]:
-        chapters.append({"title": chapter["title"], "hours": chapter["hours"]})
+    for chapter in COURSES[subject]["chapters"]:
         total = total + chapter["hours"]
-    return {
-        "name": name,
-        "code": course["code"],
-        "exam_date": course["exam_date"],
-        "chapters": chapters,
-        "total_hours": total,
-    }
-
-
-def build_name_table():
-    table = {}
-    for name in COURSES:
-        table[clean_name(name)] = name
-        table[clean_name(COURSES[name]["code"])] = name
-    for short_name, full_name in EXTRA_NAMES.items():
-        table[clean_name(short_name)] = full_name
-    return table
-
-
-NAME_TABLE = build_name_table()
-
-
-def resolve_subject(query):
-    """Return found, missing, or ambiguous. Do not guess when two courses match."""
-    raw = (query or "").strip()
-    key = clean_name(raw)
-    if key == "":
-        return {"status": "missing", "query": raw}
-    if key in NAME_TABLE:
-        return {"status": "found", "name": NAME_TABLE[key], "query": raw}
-    if len(key) < 3:
-        return {"status": "missing", "query": raw}
-
-    hits = []
-    for name in COURSES:
-        normal = clean_name(name)
-        if key in normal or normal in key:
-            hits.append(name)
-    if len(hits) == 1:
-        return {"status": "found", "name": hits[0], "query": raw}
-    if len(hits) > 1:
-        return {"status": "ambiguous", "candidates": hits, "query": raw}
-    return {"status": "missing", "query": raw}
+    return total

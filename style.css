@@ -1,0 +1,187 @@
+/* Colours and layout for the Study Planner Agent page.
+   Main colours: orange (#ff6a00) and white. */
+
+/* ---------- Whole page ---------- */
+body, gradio-app, .gradio-container, .main, .wrap, .contain {
+    background: #fff7f0 !important;
+}
+.gradio-container {
+    padding: 0 !important;
+    max-width: 100% !important;
+}
+footer {
+    display: none !important;   /* hide Gradio's own footer */
+}
+
+/* The middle part of the page */
+.page {
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto !important;
+    padding: 0 20px;
+}
+
+/* ---------- Top bar ---------- */
+/* Fixed to the top of the screen, full width, white */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    border-bottom: 3px solid #ff6a00;
+    padding: 16px 40px;
+}
+.brand {
+    font-size: 22px;
+    font-weight: 800;
+    color: #222;
+}
+.brand span {
+    color: #ff6a00;
+}
+.clock {
+    font-size: 15px;
+    color: #555;
+}
+.intro {
+    text-align: center;
+    padding: 110px 20px 10px;   /* space for the fixed top bar */
+}
+.intro h1 {
+    font-size: 32px;
+    margin: 0;
+    color: #222 !important;
+}
+.intro p {
+    color: #666 !important;
+    margin: 8px auto 0;
+    max-width: 640px;
+}
+
+/* ---------- Question box ---------- */
+.page .form, .question, .question label, .question .wrap {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+.question textarea {
+    background: #fff !important;
+    border: 2px solid #ffd2ad !important;
+    border-radius: 14px !important;
+    font-size: 15px !important;
+    padding: 14px !important;
+}
+.question textarea:focus {
+    border-color: #ff6a00 !important;
+}
+.counter {
+    text-align: right;
+    color: #a3a3a3;
+    font-size: 12px;
+}
+
+/* ---------- Cards ---------- */
+.card {
+    background: #fff !important;
+    border: 1px solid #ffe0c7 !important;
+    border-radius: 16px !important;
+    padding: 18px !important;
+    box-shadow: 0 4px 16px rgba(255, 120, 30, 0.08);
+}
+.card-title {
+    font-weight: 700;
+    color: #ff5a00;
+    font-size: 15px;
+}
+.answer-card {
+    border-left: 5px solid #ff6a00 !important;
+}
+
+/* ---------- Buttons ---------- */
+.send-btn {
+    background: linear-gradient(135deg, #ff7a18, #ff4d00) !important;
+    color: #fff !important;
+    border: none !important;
+    font-size: 16px !important;
+    border-radius: 12px !important;
+}
+.clear-btn {
+    background: #fff !important;
+    color: #ff5a00 !important;
+    border: 2px solid #ffb27a !important;
+    font-size: 16px !important;
+    border-radius: 12px !important;
+}
+.test-btn {
+    background: #fff !important;
+    color: #333 !important;
+    border: 1px solid #ffd2ad !important;
+    border-radius: 12px !important;
+    font-size: 13px !important;
+}
+.test-btn:hover {
+    background: #fff1e6 !important;
+    border-color: #ff7a18 !important;
+}
+.view-btn {
+    background: #fff !important;
+    color: #ff5a00 !important;
+    border: 2px dashed #ff7a18 !important;
+    border-radius: 12px !important;
+}
+.details textarea {
+    background: #fffaf5 !important;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+/* ---------- Loading spinner ---------- */
+.answer-card .pending, .answer-card .pending * {
+    opacity: 1 !important;   /* keep it bright while the agent works */
+}
+.loader {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    color: #444;
+    padding: 10px 0;
+}
+.spinner {
+    width: 34px;
+    height: 34px;
+    border: 4px solid #ffe0c7;
+    border-top-color: #ff6a00;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+    flex-shrink: 0;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ---------- Footer ---------- */
+/* Only text, no box and no line */
+.footer {
+    margin-top: 30px;
+    padding: 20px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.footer .small {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+}
+.footer-right {
+    font-size: 13px;
+    color: #555;
+}

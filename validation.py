@@ -1,254 +1,181 @@
-"""Check a function call before it runs.
+"""Safety checks. They run in Python, BEFORE any function runs.
 
-Step 1. The name must be on the allow list.
-Step 2. The arguments must have the right type and a safe range.
-Step 3. The guardrail blocks unsafe text, even if the name is allowed.
+1. guardrail()  -> blocks prompt injection and unsafe requests
+2. check_call() -> allow list + checks the arguments (required, type, range)
+                   + checks that the student really said them (Part 4 improvement)
 """
 
 import re
 
-MIN_HOURS = 0.5
-MAX_HOURS = 8.0
-MIN_DAYS = 1
-MAX_DAYS = 30
-MIN_DAY_NUMBER = 1
-MAX_DAY_NUMBER = 60
+from data import COURSES, NICKNAMES, find_subject, simplify
+from tools import FUNCTIONS
 
-# This dictionary is the allow list. A name that is not here is rejected.
-TOOLS = {
-    "create_study_plan": {
-        "description": (
-            "Build a day-by-day study plan for one subject. "
-            "Use the days and hours the student wrote. Do not invent them."
-        ),
-        "parameters": {
-            "subject": {"type": "string", "description": "Course name, for example Data Structures."},
-            "days_available": {"type": "integer", "description": "Number of days, from 1 to 30."},
-            "hours_per_day": {"type": "number", "description": "Hours each day, from 0.5 to 8."},
-        },
-        "required": ["subject", "days_available", "hours_per_day"],
-    },
-    "check_workload": {
-        "description": (
-            "Check if the student has enough hours for one subject. "
-            "Use the days and hours the student wrote. Do not invent them."
-        ),
-        "parameters": {
-            "subject": {"type": "string", "description": "Course name, for example Machine Learning."},
-            "days_available": {"type": "integer", "description": "Number of days, from 1 to 30."},
-            "hours_per_day": {"type": "number", "description": "Hours each day, from 0.5 to 8."},
-        },
-        "required": ["subject", "days_available", "hours_per_day"],
-    },
-    "get_day_plan": {
-        "description": (
-            "Say what to study on one day. "
-            "Use a saved plan if there is one. Otherwise use 2 hours per day."
-        ),
-        "parameters": {
-            "subject": {"type": "string", "description": "Course name, for example Database Systems."},
-            "day_number": {"type": "integer", "description": "Day number, from 1 to 60."},
-        },
-        "required": ["subject", "day_number"],
-    },
-}
+# ---------------------------------------------------------------
+# 1. Guardrail
+# ---------------------------------------------------------------
 
-
-class ValidationError(Exception):
-    """The name or the arguments are not acceptable."""
-
-
-class GuardrailError(Exception):
-    """The request is unsafe, so the function must not run."""
-
-
-INJECTION_MESSAGE = (
-    "I will not ignore my rules or follow that instruction. "
-    "I can only help you plan revision for the subjects in my dataset. "
-    "Tell me the subject, how many days you have, and how many hours you can study each day."
-)
-
-UNSAFE_MESSAGE = (
-    "I will not do that. I do not write assignments, provide exam answers, "
-    "or access private accounts and records. I can help you plan your own revision instead."
-)
-
-GUARDRAIL_MESSAGE = (
-    "Blocked by the guardrail: the arguments ask for an unsafe or unsupported action, "
-    "so the function was not run."
-)
-
-# Simple phrase checks. These are easier to read than one long pattern.
 INJECTION_PHRASES = [
     "ignore your instructions",
     "ignore all instructions",
-    "ignore the instructions",
     "ignore previous instructions",
-    "disregard your instructions",
-    "disregard the instructions",
+    "ignore the instructions",
     "forget your instructions",
+    "disregard your instructions",
+    "override your rules",
     "you are now",
     "jailbreak",
-    "override your rules",
-    "do not follow your instructions",
 ]
 
 UNSAFE_PHRASES = [
     "exam answer",
-    "exam answers",
     "answer key",
     "cheat",
     "write my assignment",
-    "write the assignment",
     "do my assignment",
     "do my homework",
-    "complete my assignment",
-    "another student",
     "hack",
-    "steal",
     "password",
+    "steal",
     "change my grade",
+    "another student",
     "delete all",
 ]
 
 
-def tool_specs_for_model():
-    """The tool list given to the language model. The model chooses one."""
-    specs = []
-    for name, spec in TOOLS.items():
-        specs.append({
-            "type": "function",
-            "function": {
-                "name": name,
-                "description": spec["description"],
-                "parameters": {
-                    "type": "object",
-                    "properties": spec["parameters"],
-                    "required": spec["required"],
-                },
-            },
-        })
-    return specs
-
-
-def find_blocked_phrase(text):
-    """Return 'injection', 'unsafe', or None."""
-    low = (text or "").lower()
+def guardrail(text):
+    """Return a refusal message if the text is not allowed. Return None if it is fine."""
+    text = str(text).lower()
     for phrase in INJECTION_PHRASES:
-        if phrase in low:
-            return "injection"
+        if phrase in text:
+            return ("Blocked (prompt injection): I will not ignore my rules. "
+                    "I only plan revision for the subjects in my list.")
     for phrase in UNSAFE_PHRASES:
-        if phrase in low:
-            return "unsafe"
+        if phrase in text:
+            return ("Blocked (unsafe request): I do not write assignments, give exam answers, "
+                    "or access other people's accounts or records. I can help you plan your own revision.")
     return None
 
 
-def screen_user_message(text):
-    """Stop a bad message before the model is called. Return None if it is ok."""
-    kind = find_blocked_phrase(text)
-    if kind == "injection":
-        return {"rule": "prompt_injection", "message": INJECTION_MESSAGE}
-    if kind == "unsafe":
-        return {"rule": "unsafe_request", "message": UNSAFE_MESSAGE}
-    return None
+# ---------------------------------------------------------------
+# 2. Allow list and argument checks
+# ---------------------------------------------------------------
+
+# Which arguments each function needs.
+REQUIRED_ARGUMENTS = {
+    "create_study_plan": ["subject", "days_available", "hours_per_day"],
+    "check_workload": ["subject", "days_available", "hours_per_day"],
+    "get_day_plan": ["subject", "day_number"],
+}
 
 
-def apply_argument_guardrail(name, arguments):
-    """Block a call when the arguments themselves ask for something unsafe."""
-    text = ""
-    for value in arguments.values():
-        text = text + " " + str(value)
-    if find_blocked_phrase(text) is not None:
-        raise GuardrailError(GUARDRAIL_MESSAGE)
-    if name not in TOOLS:
-        raise GuardrailError(GUARDRAIL_MESSAGE)
-
-
-def validate_call(name, arguments):
-    """Check the name and the arguments. Return a clean dict, or raise an error."""
-    if not isinstance(name, str) or name not in TOOLS:
-        allowed = ", ".join(TOOLS.keys())
-        raise ValidationError(
-            "Function '" + str(name) + "' is not on the allow list. Allowed functions: " + allowed + "."
-        )
-    if not isinstance(arguments, dict):
-        raise ValidationError("Arguments must be an object with named fields.")
-
-    spec = TOOLS[name]
-    clean = {}
-    for field in spec["required"]:
-        if field not in arguments:
-            raise ValidationError("Missing required argument: " + field + ".")
-
-    for field in spec["parameters"]:
-        if field not in arguments:
-            continue
-        clean[field] = check_one_field(field, arguments[field])
-    return clean
-
-
-def check_one_field(field, value):
-    if field == "subject":
-        return check_subject(value)
-    if field == "days_available":
-        number = check_int(value, field)
-        if number < MIN_DAYS or number > MAX_DAYS:
-            raise ValidationError("days_available must be an integer from 1 to 30.")
-        return number
-    if field == "day_number":
-        number = check_int(value, field)
-        if number < MIN_DAY_NUMBER or number > MAX_DAY_NUMBER:
-            raise ValidationError("day_number must be an integer from 1 to 60.")
-        return number
-    if field == "hours_per_day":
-        number = check_hours(value)
-        if number < MIN_HOURS or number > MAX_HOURS:
-            raise ValidationError(
-                "hours_per_day must be a number from 0.5 to 8.0. More than 8 hours in a day is rejected."
-            )
-        return number
-    raise ValidationError("Unsupported argument: " + field + ".")
-
-
-def check_subject(value):
-    if not isinstance(value, str):
-        raise ValidationError("subject must be a short course name.")
-    text = value.strip().strip("\"'")
-    if text == "":
-        raise ValidationError("subject is required.")
-    if len(text) > 80:
-        raise ValidationError("subject must be at most 80 characters.")
-    if re.search(r"[\x00-\x1f]", text):
-        raise ValidationError("subject contains unsupported characters.")
-    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 +#&'./-]{0,79}", text) is None:
-        raise ValidationError("subject must be a short course name.")
-    return text
-
-
-def check_int(value, field):
-    if isinstance(value, bool):
-        raise ValidationError(field + " must be an integer.")
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    if isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip()):
-        return int(value.strip())
-    raise ValidationError(field + " must be an integer.")
-
-
-def check_hours(value):
-    if isinstance(value, bool):
-        raise ValidationError("hours_per_day must be a number.")
-    if isinstance(value, (int, float)):
+def to_whole_number(value, name, smallest, largest):
+    """Check that value is a whole number between smallest and largest."""
+    try:
         number = float(value)
-    elif isinstance(value, str) and re.fullmatch(r"-?\d+(\.\d+)?", value.strip()):
-        number = float(value.strip())
-    else:
-        raise ValidationError("hours_per_day must be a number.")
-    if number != number or number == float("inf") or number == float("-inf"):
-        raise ValidationError("hours_per_day must be a finite number.")
-    scaled = number * 10
-    if abs(scaled - round(scaled)) > 0.000001:
-        raise ValidationError("hours_per_day must use at most one decimal place.")
-    return round(number, 1)
+    except (TypeError, ValueError):
+        raise ValueError(name + " must be a number.")
+    if number != int(number):
+        raise ValueError(name + " must be a whole number.")
+    number = int(number)
+    if number < smallest or number > largest:
+        raise ValueError(name + " must be from " + str(smallest) + " to " + str(largest) + ".")
+    return number
+
+
+def subject_in_question(subject, question):
+    """True if the student wrote this subject (its name, code or nickname) in the question."""
+    question = " " + simplify(question) + " "
+
+    # The exact subject text, e.g. "Quantum Basket Weaving"
+    if " " + simplify(subject) + " " in question:
+        return True
+
+    # Another name for the same course, e.g. "ML" for "Machine Learning"
+    course = find_subject(subject)
+    if course is None:
+        return False
+    other_names = [course, COURSES[course]["code"]]
+    for nickname, full_name in NICKNAMES.items():
+        if full_name == course:
+            other_names.append(nickname)
+    for other_name in other_names:
+        if " " + simplify(other_name) + " " in question:
+            return True
+    return False
+
+
+def numbers_in_question(question):
+    """All numbers the student wrote, e.g. 'I have 5 days and 2.5 hours' -> [5.0, 2.5]."""
+    numbers = []
+    for text in re.findall(r"\d+(?:\.\d+)?", question):
+        numbers.append(float(text))
+    return numbers
+
+
+def check_question_has_details(clean, question):
+    """Part 4 improvement: the model may not invent arguments.
+
+    The subject and every number must come from the student's question.
+    If something is missing, the function does not run and the agent asks for it.
+    """
+    missing = []
+    if not subject_in_question(clean["subject"], question):
+        missing.append("which subject")
+
+    numbers = numbers_in_question(question)
+    if "days_available" in clean and clean["days_available"] not in numbers:
+        missing.append("how many days you have")
+    if "hours_per_day" in clean and clean["hours_per_day"] not in numbers:
+        missing.append("how many hours you can study each day")
+    if "day_number" in clean and clean["day_number"] not in numbers:
+        missing.append("which day number")
+
+    if len(missing) > 0:
+        raise ValueError("You did not tell me " + " and ".join(missing) + ". "
+                         "Please add it to your question, for example: "
+                         "\"Create a 10-day plan for Machine Learning, 2 hours a day.\"")
+
+
+def check_call(name, arguments, question):
+    """Return clean arguments, or raise ValueError with the reason."""
+    # Step 1: allow list
+    if name not in FUNCTIONS:
+        raise ValueError("'" + str(name) + "' is not on the allow list. "
+                         "Allowed: " + ", ".join(FUNCTIONS.keys()) + ".")
+    if not isinstance(arguments, dict):
+        raise ValueError("The arguments must be a JSON object.")
+
+    # Step 2: required arguments
+    for needed in REQUIRED_ARGUMENTS[name]:
+        if needed not in arguments:
+            raise ValueError("Missing argument: " + needed + ".")
+
+    # Step 3: type and range of each argument (extra arguments are dropped)
+    clean = {}
+    subject = arguments["subject"]
+    if not isinstance(subject, str) or subject.strip() == "" or len(subject) > 80:
+        raise ValueError("subject must be a short piece of text.")
+    clean["subject"] = subject.strip()
+
+    if "days_available" in REQUIRED_ARGUMENTS[name]:
+        clean["days_available"] = to_whole_number(arguments["days_available"], "days_available", 1, 30)
+
+    if "hours_per_day" in REQUIRED_ARGUMENTS[name]:
+        try:
+            hours = float(arguments["hours_per_day"])
+        except (TypeError, ValueError):
+            raise ValueError("hours_per_day must be a number.")
+        if hours < 0.5 or hours > 8:
+            raise ValueError("hours_per_day must be from 0.5 to 8. More than 8 hours a day is not allowed.")
+        hours = round(hours, 1)
+        if hours == int(hours):
+            hours = int(hours)       # show 2 instead of 2.0
+        clean["hours_per_day"] = hours
+
+    if "day_number" in REQUIRED_ARGUMENTS[name]:
+        clean["day_number"] = to_whole_number(arguments["day_number"], "day_number", 1, 60)
+
+    # Step 4: the student must have said these details (no invented arguments)
+    check_question_has_details(clean, question)
+
+    return clean

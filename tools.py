@@ -1,242 +1,177 @@
-"""The three functions the model may call.
+"""The three Python functions (tools) the AI model is allowed to call.
 
-1. create_study_plan  -> make a day-by-day plan and save it
-2. check_workload     -> say if the hours are enough
-3. get_day_plan       -> say what to study on one day
+1. create_study_plan -> makes a day-by-day plan and saves it
+2. check_workload    -> says if the student has enough time
+3. get_day_plan      -> says what to study on one day
 
-All numbers come from data.py. A missing subject stays missing.
+Every number comes from data.py. Nothing is invented.
 """
 
-import math
+from data import COURSES, find_subject, total_hours
 
-from data import course_record, resolve_subject, subject_names
-
-DEFAULT_HOURS_PER_DAY = 2.0
+DEFAULT_HOURS_PER_DAY = 2
 
 
-def to_tenths(hours):
-    """Turn 1.5 hours into 15 tenths, so the split does not drift."""
-    return int(math.floor(float(hours) * 10 + 0.5))
-
-
-def from_tenths(tenths):
-    return round(tenths / 10, 1)
-
-
-def pack_chapters(chapters, days_available, hours_per_day):
-    """Fill each day up to hours_per_day. Split a chapter if it does not fit.
-
-    Hours that do not fit are returned as uncovered. They are not placed on an extra day.
-    """
-    per_day = to_tenths(hours_per_day)
-    pending = []
-    for chapter in chapters:
-        pending.append({
-            "title": chapter["title"],
-            "left": to_tenths(chapter["hours"]),
-            "total": to_tenths(chapter["hours"]),
-        })
-
-    days = []
-    index = 0
-    day_number = 1
-    while day_number <= days_available and index < len(pending) and per_day > 0:
-        space = per_day
-        items = []
-        while index < len(pending) and space > 0:
-            chapter = pending[index]
-            take = min(space, chapter["left"])
-            if take <= 0:
-                break
-            items.append({
-                "chapter": chapter["title"],
-                "hours": from_tenths(take),
-                "chapter_total_hours": from_tenths(chapter["total"]),
-            })
-            chapter["left"] = chapter["left"] - take
-            space = space - take
-            if chapter["left"] == 0:
-                index = index + 1
-        if len(items) > 0:
-            days.append({
-                "day": day_number,
-                "hours": from_tenths(per_day - space),
-                "items": items,
-            })
-        day_number = day_number + 1
-
-    uncovered = []
-    for chapter in pending:
-        if chapter["left"] > 0:
-            uncovered.append({
-                "chapter": chapter["title"],
-                "hours_remaining": from_tenths(chapter["left"]),
-            })
-    return days, uncovered
-
-
-def missing_subject(resolved):
-    if resolved["status"] == "ambiguous":
-        return {
-            "found": False,
-            "ambiguous": True,
-            "subject": resolved.get("query", ""),
-            "candidates": list(resolved["candidates"]),
-            "message": "More than one subject matches that name.",
-        }
+def subject_not_found(subject):
+    """The answer every tool gives when the subject is not in data.py."""
     return {
         "found": False,
-        "ambiguous": False,
-        "subject": resolved.get("query", ""),
-        "known_subjects": subject_names(),
-        "message": "That subject is not in the local course list.",
+        "subject": subject,
+        "message": "This subject is not in my course list.",
+        "known_subjects": list(COURSES.keys()),
     }
 
 
-def hours_budget(total_hours, days_available, hours_per_day):
-    total = to_tenths(total_hours)
-    available = days_available * to_tenths(hours_per_day)
-    fits = total <= available
-    shortfall = 0
-    spare = 0
-    if fits:
-        spare = available - total
-    else:
-        shortfall = total - available
+def split_into_days(subject, days, hours_per_day):
+    """Put the chapters into days. Each day gets at most hours_per_day hours.
+
+    A long chapter can continue on the next day.
+    Chapters that do not fit in the days given are returned as 'not_covered'.
+    """
+    # A list of [chapter title, hours still to study].
+    to_study = []
+    for chapter in COURSES[subject]["chapters"]:
+        to_study.append([chapter["title"], chapter["hours"]])
+
+    plan = []
+    for day in range(1, days + 1):
+        free_time = hours_per_day
+        today = []
+        while free_time > 0 and len(to_study) > 0:
+            title = to_study[0][0]
+            hours_left = to_study[0][1]
+            study = min(free_time, hours_left)
+            today.append({"chapter": title, "hours": study})
+            free_time = round(free_time - study, 1)
+            hours_left = round(hours_left - study, 1)
+            if hours_left == 0:
+                to_study.pop(0)          # chapter finished
+            else:
+                to_study[0][1] = hours_left  # continue it tomorrow
+        if len(today) == 0:
+            break                         # everything is already planned
+        plan.append({"day": day, "study": today})
+
+    not_covered = []
+    for title, hours_left in to_study:
+        not_covered.append({"chapter": title, "hours_left": hours_left})
+    return plan, not_covered
+
+
+def create_study_plan(subject, days_available, hours_per_day, saved_plans):
+    name = find_subject(subject)
+    if name is None:
+        return subject_not_found(subject)
+
+    plan, not_covered = split_into_days(name, days_available, hours_per_day)
+    result = {
+        "found": True,
+        "subject": name,
+        "exam_date": COURSES[name]["exam_date"],
+        "hours_needed": total_hours(name),
+        "hours_available": round(days_available * hours_per_day, 1),
+        "hours_per_day": hours_per_day,
+        "plan": plan,
+        "not_covered": not_covered,
+    }
+    saved_plans[name] = result  # remember it, so get_day_plan can use it later
+    return result
+
+
+def check_workload(subject, days_available, hours_per_day, saved_plans):
+    name = find_subject(subject)
+    if name is None:
+        return subject_not_found(subject)
+
+    needed = total_hours(name)
+    available = round(days_available * hours_per_day, 1)
     return {
-        "total_hours": from_tenths(total),
-        "available_hours": from_tenths(available),
-        "fits": fits,
-        "shortfall_hours": from_tenths(shortfall),
-        "spare_hours": from_tenths(spare),
-    }
-
-
-def create_study_plan(subject, days_available, hours_per_day, store):
-    """Build the plan and save it under the subject name."""
-    resolved = resolve_subject(subject)
-    if resolved["status"] != "found":
-        return missing_subject(resolved)
-
-    record = course_record(resolved["name"])
-    days, uncovered = pack_chapters(record["chapters"], days_available, hours_per_day)
-    scheduled = 0
-    for day in days:
-        for item in day["items"]:
-            scheduled = scheduled + to_tenths(item["hours"])
-
-    plan = {
         "found": True,
-        "subject": record["name"],
-        "code": record["code"],
-        "exam_date": record["exam_date"],
-        "days_available": days_available,
-        "hours_per_day": hours_per_day,
-        "scheduled_hours": from_tenths(scheduled),
-        "days": days,
-        "uncovered": uncovered,
+        "subject": name,
+        "exam_date": COURSES[name]["exam_date"],
+        "hours_needed": needed,
+        "hours_available": available,
+        "enough_time": available >= needed,
+        "difference": round(available - needed, 1),
     }
-    budget = hours_budget(record["total_hours"], days_available, hours_per_day)
-    plan.update(budget)
-    store[record["name"]] = plan
-    return plan
 
 
-def check_workload(subject, days_available, hours_per_day, store=None):
-    """Compare needed hours with the hours the student has. Does not save a plan."""
-    resolved = resolve_subject(subject)
-    if resolved["status"] != "found":
-        return missing_subject(resolved)
+def get_day_plan(subject, day_number, saved_plans):
+    name = find_subject(subject)
+    if name is None:
+        return subject_not_found(subject)
 
-    record = course_record(resolved["name"])
-    result = {
-        "found": True,
-        "subject": record["name"],
-        "code": record["code"],
-        "exam_date": record["exam_date"],
-        "chapters": record["chapters"],
-        "days_available": days_available,
-        "hours_per_day": hours_per_day,
-    }
-    result.update(hours_budget(record["total_hours"], days_available, hours_per_day))
-    return result
-
-
-def get_day_plan(subject, day_number, store):
-    """One day from the saved plan, or from a default of 2 hours per day."""
-    resolved = resolve_subject(subject)
-    if resolved["status"] != "found":
-        return missing_subject(resolved)
-
-    record = course_record(resolved["name"])
-    saved = store.get(record["name"])
-    if saved:
-        days = saved["days"]
-        source = "saved_plan"
-        hours_per_day = saved["hours_per_day"]
-        note = "This day is taken from the plan saved earlier in this session."
+    if name in saved_plans:
+        plan = saved_plans[name]["plan"]
+        source = "your saved plan"
     else:
-        per_day = to_tenths(DEFAULT_HOURS_PER_DAY)
-        total = to_tenths(record["total_hours"])
-        needed_days = 1
-        if per_day > 0:
-            needed_days = max(1, math.ceil(total / per_day))
-        days, _uncovered = pack_chapters(record["chapters"], needed_days, DEFAULT_HOURS_PER_DAY)
-        source = "default_2_hours_per_day"
-        hours_per_day = DEFAULT_HOURS_PER_DAY
-        note = (
-            "No plan was saved for this subject in this session, "
-            "so this day uses the default pace of 2 hours per day."
-        )
+        # No plan yet: use 2 hours per day and enough days for the whole course.
+        plan, not_covered = split_into_days(name, 60, DEFAULT_HOURS_PER_DAY)
+        source = "the default pace of 2 hours per day"
 
-    chosen = None
-    for day in days:
+    for day in plan:
         if day["day"] == day_number:
-            chosen = day
-            break
+            return {"found": True, "subject": name, "day": day_number,
+                    "source": source, "study": day["study"]}
 
-    result = {
-        "found": True,
-        "subject": record["name"],
-        "code": record["code"],
-        "exam_date": record["exam_date"],
-        "day_number": day_number,
-        "day_found": chosen is not None,
-        "source": source,
-        "hours_per_day": hours_per_day,
-        "plan_days": len(days),
-        "note": note,
-    }
-    if chosen is None:
-        result["items"] = []
-        result["hours"] = 0
-        result["message"] = (
-            "The plan has " + str(len(days)) + " day(s). Day " + str(day_number)
-            + " has no study block, and none was invented."
-        )
-        return result
-
-    result["hours"] = chosen["hours"]
-    result["items"] = chosen["items"]
-    return result
+    return {"found": True, "subject": name, "day": day_number, "source": source,
+            "study": [], "message": "The plan has only " + str(len(plan)) + " days."}
 
 
-def execute(name, arguments, store):
-    """Run one allowed function. validate_call must run before this."""
-    if name == "create_study_plan":
-        return create_study_plan(
-            arguments["subject"],
-            arguments["days_available"],
-            arguments["hours_per_day"],
-            store,
-        )
-    if name == "check_workload":
-        return check_workload(
-            arguments["subject"],
-            arguments["days_available"],
-            arguments["hours_per_day"],
-            store,
-        )
-    if name == "get_day_plan":
-        return get_day_plan(arguments["subject"], arguments["day_number"], store)
-    raise KeyError(name)
+# The functions the model may call. This dictionary is also the ALLOW LIST.
+FUNCTIONS = {
+    "create_study_plan": create_study_plan,
+    "check_workload": check_workload,
+    "get_day_plan": get_day_plan,
+}
+
+# The same three tools, described for the AI model (JSON schema format).
+TOOLS_FOR_MODEL = [
+    {
+        "type": "function",
+        "function": {
+            "name": "create_study_plan",
+            "description": "Make a day-by-day study plan for one subject.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subject": {"type": "string", "description": "Subject name, e.g. Data Structures"},
+                    "days_available": {"type": "integer", "description": "Number of days (1 to 30)"},
+                    "hours_per_day": {"type": "number", "description": "Hours per day (0.5 to 8)"},
+                },
+                "required": ["subject", "days_available", "hours_per_day"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_workload",
+            "description": "Check if the student has enough time to study one subject.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subject": {"type": "string", "description": "Subject name, e.g. Machine Learning"},
+                    "days_available": {"type": "integer", "description": "Number of days (1 to 30)"},
+                    "hours_per_day": {"type": "number", "description": "Hours per day (0.5 to 8)"},
+                },
+                "required": ["subject", "days_available", "hours_per_day"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_day_plan",
+            "description": "Say what to study on one day of the plan for one subject.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subject": {"type": "string", "description": "Subject name, e.g. Database Systems"},
+                    "day_number": {"type": "integer", "description": "Day number (1 to 60)"},
+                },
+                "required": ["subject", "day_number"],
+            },
+        },
+    },
+]
