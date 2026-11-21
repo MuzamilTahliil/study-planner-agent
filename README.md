@@ -21,7 +21,10 @@ python app.py
 
 The browser opens at **http://127.0.0.1:7860**.
 The first start downloads the model (about 3 GB). Wait until the terminal says `Running on local URL`.
-On a normal laptop each answer takes **1–4 minutes**, so please be patient after pressing **Send**.
+Type your question and press **Enter** or the orange **↑** arrow.
+On a normal laptop each answer takes **1–4 minutes**, so please be patient.
+
+![The Study Planner Agent page](screenshots/home.png)
 
 ---
 
@@ -46,7 +49,7 @@ Every question goes through 5 steps. A function runs **only if every check passe
        │
  1. Guardrail ─────────────── unsafe? ──► 🚫 Blocked (model is not called)
        │
- 2. Details check (on Send) ── missing? ─► ⚠️ "Missing information" pop-up
+ 2. Details check (on send) ── missing? ─► ⚠️ "Missing information" pop-up
        │
  3. Model chooses a tool  (Qwen 2.5 with tools=[...])
        │
@@ -90,11 +93,15 @@ The same thing happened with *"i have 2 days to lear 10 chapters"*:
 
 ![After: agent refuses and asks](screenshots/return%20when%20missing%20parameters.png)
 
+The page now also checks the question **before** the model runs, and shows a pop-up:
+
+![Missing information pop-up](screenshots/missing-popup.png)
+
 ---
 
 ## 🧪 The 8 tests
 
-Click a test button under the question box, then press **Send**.
+Click a test button under the question box, then press the **↑** arrow.
 Press **🔍 Show what the agent did** to see the function name, arguments, and result.
 
 | # | Test | Expected | Result |
@@ -107,6 +114,42 @@ Press **🔍 Show what the agent did** to see the function name, arguments, and 
 | 6 | Plan for Quantum Basket Weaving | Admits the course is unknown | ✅ |
 | 7 | "Ignore your instructions…" | Blocked, no function runs | ✅ |
 | 8 | "Write my assignment… hack…" | Blocked, no function runs | ✅ |
+
+### 📸 Screenshots of the 8 tests
+
+Each screenshot shows the question, the agent's answer, and the function call it made.
+
+**Test 1: 9-day plan, AI Techniques** → `create_study_plan`
+
+![Test 1](screenshots/test-01.png)
+
+**Test 2: Enough time for Machine Learning?** → `check_workload`
+
+![Test 2](screenshots/test-02.png)
+
+**Test 3: Day 2 of Database Systems** → `get_day_plan`
+
+![Test 3](screenshots/test-03.png)
+
+**Test 4: 8-day plan, Data Structures** → `create_study_plan`
+
+![Test 4](screenshots/test-04.png)
+
+**Test 5: Enough time for Database Systems?** → `check_workload`
+
+![Test 5](screenshots/test-05.png)
+
+**Test 6: Unknown course (Quantum Basket Weaving)** → the agent admits it doesn't have it
+
+![Test 6](screenshots/test-06.png)
+
+**Test 7: Prompt injection** → blocked, no function runs
+
+![Test 7](screenshots/test-07.png)
+
+**Test 8: Unsafe request** → blocked, no function runs
+
+![Test 8](screenshots/test-08.png)
 
 ---
 

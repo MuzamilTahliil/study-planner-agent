@@ -21,21 +21,7 @@ footer {
     padding: 0 20px;
 }
 
-/* ---------- Top bar ---------- */
-/* Fixed to the top of the screen, full width, white */
-.topbar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #fff;
-    border-bottom: 3px solid #ff6a00;
-    padding: 16px 40px;
-}
+/* ---------- Title ---------- */
 .brand {
     font-size: 22px;
     font-weight: 800;
@@ -44,18 +30,17 @@ footer {
 .brand span {
     color: #ff6a00;
 }
-.clock {
-    font-size: 15px;
-    color: #555;
-}
 .intro {
     text-align: center;
-    padding: 110px 20px 10px;   /* space for the fixed top bar */
+    padding: 40px 20px 10px;
 }
 .intro h1 {
-    font-size: 32px;
+    font-size: 36px;
     margin: 0;
     color: #222 !important;
+}
+.intro h1 span {
+    color: #ff6a00 !important;
 }
 .intro p {
     color: #666 !important;
@@ -63,7 +48,21 @@ footer {
     max-width: 640px;
 }
 
-/* ---------- Question box ---------- */
+/* ---------- Question box with the arrow inside ---------- */
+/* The whole bar is one white rounded box */
+.input-bar {
+    background: #fff !important;
+    border: 2px solid #ffd2ad !important;
+    border-radius: 28px !important;
+    padding: 6px 8px 6px 18px !important;
+    align-items: center !important;
+    gap: 8px !important;
+    box-shadow: 0 4px 16px rgba(255, 120, 30, 0.08);
+}
+.input-bar:focus-within {
+    border-color: #ff6a00 !important;
+}
+/* The text box itself has no border: the bar is the border */
 .page .form, .question, .question label, .question .wrap {
     background: transparent !important;
     border: none !important;
@@ -71,14 +70,28 @@ footer {
     padding: 0 !important;
 }
 .question textarea {
-    background: #fff !important;
-    border: 2px solid #ffd2ad !important;
-    border-radius: 14px !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
     font-size: 15px !important;
-    padding: 14px !important;
+    padding: 10px 0 !important;
 }
-.question textarea:focus {
-    border-color: #ff6a00 !important;
+/* The round orange arrow button */
+.send-arrow {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+    border-radius: 50% !important;
+    padding: 0 !important;
+    background: #ff6a00 !important;
+    color: #fff !important;
+    border: none !important;
+    font-size: 22px !important;
+    font-weight: 700 !important;
+}
+.send-arrow:hover {
+    background: #e85d00 !important;
 }
 .counter {
     text-align: right;
@@ -104,20 +117,6 @@ footer {
 }
 
 /* ---------- Buttons ---------- */
-.send-btn {
-    background: linear-gradient(135deg, #ff7a18, #ff4d00) !important;
-    color: #fff !important;
-    border: none !important;
-    font-size: 16px !important;
-    border-radius: 12px !important;
-}
-.clear-btn {
-    background: #fff !important;
-    color: #ff5a00 !important;
-    border: 2px solid #ffb27a !important;
-    font-size: 16px !important;
-    border-radius: 12px !important;
-}
 .test-btn {
     background: #fff !important;
     color: #333 !important;
