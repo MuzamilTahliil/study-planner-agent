@@ -57,6 +57,58 @@ def guardrail(text):
 
 
 # ---------------------------------------------------------------
+# 1b. Is the question complete? (checked when Send is pressed)
+# ---------------------------------------------------------------
+
+def mentions_a_course(question):
+    """True if the question names a course.
+
+    A course from our list counts (name, code or nickname, e.g. "ML").
+    A new name in capital letters after 'for', 'of', 'course' or 'subject' also counts,
+    e.g. "for Quantum Basket Weaving". The agent will then say it does not have it.
+    """
+    words = " " + simplify(question) + " "
+    for name, course in COURSES.items():
+        if " " + simplify(name) + " " in words or " " + simplify(course["code"]) + " " in words:
+            return True
+    for nickname in NICKNAMES:
+        if " " + nickname + " " in words:
+            return True
+    # A new name in capital letters, e.g. "for English", "of English",
+    # "my course English learning", "my course is English", "subject: English"
+    if re.search(r"\b(for|of|course|subject)\s*(is|:)?\s+[A-Z][a-zA-Z]+", question):
+        return True
+    return False
+
+
+def find_missing_details(question):
+    """Return a list of the details the student forgot. An empty list means all is fine.
+
+    - "What should I study on day 2 of ML?"   needs: course + day number
+    - plans and workload questions             need: course + days + hours per day
+    """
+    missing = []
+    text = question.lower()
+
+    if not mentions_a_course(question):
+        missing.append("the name of the course")
+
+    # A question about one day, e.g. "day 2"
+    if re.search(r"\bday\s+\d+", text):
+        return missing
+
+    # Number of days, e.g. "6 days" or "9-day"
+    if not re.search(r"\d+\s*-?\s*days?\b", text):
+        missing.append("how many days you have")
+
+    # Hours per day, e.g. "2 hours" or "1.5 hrs"
+    if not re.search(r"\d+(\.\d+)?\s*(hours?|hrs?|h)\b", text):
+        missing.append("how many hours you can study each day")
+
+    return missing
+
+
+# ---------------------------------------------------------------
 # 2. Allow list and argument checks
 # ---------------------------------------------------------------
 

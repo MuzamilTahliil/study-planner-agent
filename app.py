@@ -12,6 +12,7 @@ import os
 import gradio as gr
 
 from agent import MODEL_NAME, run_agent
+from validation import find_missing_details, guardrail
 
 
 # ------------------------------------------------------------
@@ -94,6 +95,24 @@ with open(css_file, encoding="utf-8") as file:
 def fill_question(button_text):
     """A test button was pressed: put its question in the box."""
     return TESTS[button_text]
+
+
+def check_question(question):
+    """Send was pressed: first check that the question has everything the agent needs.
+
+    If something is missing, show a pop-up and stop. The agent does not run.
+    """
+    if question.strip() == "":
+        raise gr.Error("Please type a question first.", title="Empty question", print_exception=False)
+
+    # Unsafe questions go to the agent, so its guardrail can block them.
+    if guardrail(question) is not None:
+        return
+
+    missing = find_missing_details(question)
+    if len(missing) > 0:
+        message = "Please tell me: " + ", ".join(missing) + "."
+        raise gr.Error(message, title="Missing information", print_exception=False)
 
 
 def show_loading():
@@ -211,8 +230,13 @@ with gr.Blocks(title="Study Planner Agent", css=CSS, js=PAGE_JS, fill_width=True
     for button in test_buttons:
         button.click(fill_question, inputs=button, outputs=question_box)
 
-    # Send: first show the spinner, then ask the agent
+    # Send: 1) check the question  2) show the spinner  3) ask the agent
+    # .success() means: only go on if the check did not show a pop-up
     send_button.click(
+        check_question,
+        inputs=question_box,
+        show_progress="hidden",
+    ).success(
         show_loading,
         outputs=[answer_card, spinner, answer_text],
         show_progress="hidden",
