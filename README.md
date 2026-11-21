@@ -110,7 +110,7 @@ Press **🔍 Show what the agent did** to see the function name, arguments, and 
 
 ---
 
-## 📁 Files
+## Files
 
 | File | What it does |
 |---|---|
@@ -125,7 +125,7 @@ Press **🔍 Show what the agent did** to see the function name, arguments, and 
 
 ---
 
-## ⚠️ Known limits
+## Known limits
 
 - Only the 4 courses above. Others are refused on purpose ("knows its limits").
 - Numbers must be digits: "2 hours" works, "two hours" does not.
